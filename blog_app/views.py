@@ -14,9 +14,9 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 
-from .models import Users,Blog, Category
+from .models import Users,Blog, Category, Comment
 from .passwords import check_password, hash_password
-from .serializers import UserSerializer, Blogserializer
+from .serializers import UserSerializer, Blogserializer, CommentSerializer
 from blog_app.utils.email_utils import send_dynamic_email
 # Create your views here.
 @method_decorator(csrf_exempt,name='dispatch')
@@ -86,8 +86,8 @@ class login(View):
 
 @method_decorator(csrf_exempt,name='dispatch')
 class BlogView(View):
-    # def get(self,req):
-    #     return JsonResponse({'status':'middleware worked well'})
+    def get(self,req):
+        return JsonResponse({'status':'middleware worked well'})
     
     #create blog
     def post(self,request):
@@ -180,3 +180,145 @@ class BlogView(View):
 
         return JsonResponse({"message":"Post deleted"})
         
+
+
+
+@method_decorator(csrf_exempt,name='dispatch')
+class CommentView(View):
+    def post(self, request):
+
+        auth_header = request.headers.get("Authorization")
+
+        if not auth_header:
+            return JsonResponse({"error": "Token missing"}, status=401)
+
+        try:
+            token = auth_header.split(" ")[1]
+
+            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+
+            user = Users.objects.get(username=payload["username"])
+
+        except jwt.ExpiredSignatureError:
+            return JsonResponse({"error": "Token expired"}, status=401)
+
+        except jwt.InvalidTokenError:
+            return JsonResponse({"error": "Invalid token"}, status=401)
+
+        data = json.loads(request.body)
+
+        print(user)
+
+        serializer = CommentSerializer(data=data)
+
+        if not serializer.is_valid():
+            return JsonResponse(serializer.errors, status=400)
+
+        comment = serializer.save(user=user)
+
+        # author_obj = comment.post.author
+
+        # send_dynamic_email(
+        #     request,
+        #     author_obj.username,
+        #     author_obj.email,
+        #     'comment_added'
+        # )
+
+        return JsonResponse(
+            CommentSerializer(comment).data,
+            status=201
+        )
+    # UPDATE COMMENT
+    def patch(self, request, comment_id):
+        auth_header = request.headers.get("Authorization")
+        if not auth_header:
+            return JsonResponse({"error": "Token missing"}, status=401)
+
+        try:
+            token = auth_header.split(" ")[1]
+
+            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+
+            user = Users.objects.get(username=payload["username"])
+
+        except jwt.ExpiredSignatureError:
+            return JsonResponse({"error": "Token expired"}, status=401)
+
+        except jwt.InvalidTokenError:
+            return JsonResponse({"error": "Invalid token"}, status=401)
+
+        try:
+            comment = Comment.objects.get(comment_id=comment_id)
+
+        except Comment.DoesNotExist:
+            return JsonResponse({"error": "comment not found"}, status=404)
+
+        print(comment.user)
+        print(user.username)
+
+    # ONLY COMMENT OWNER
+        if comment.user != user:
+            return JsonResponse({"error": "Not allowed"}, status=403)
+
+        data = json.loads(request.body)
+
+        serializer = CommentSerializer(
+            comment,
+            data=data,
+            partial=True
+    )
+
+        if serializer.is_valid():
+
+            serializer.save()
+
+        return JsonResponse({
+            "message": "comment updated",
+            "data": serializer.data
+        })
+
+        return JsonResponse(serializer.errors, status=400)
+
+
+# DELETE COMMENT
+    def delete(self, request, comment_id):
+
+        auth_header = request.headers.get("Authorization")
+
+        if not auth_header:
+            return JsonResponse({"error": "Token missing"}, status=401)
+
+        try:
+            token = auth_header.split(" ")[1]
+
+            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+
+            user = Users.objects.get(username=payload["username"])
+
+        except jwt.ExpiredSignatureError:
+            return JsonResponse({"error": "Token expired"}, status=401)
+
+        except jwt.InvalidTokenError:
+            return JsonResponse({"error": "Invalid token"}, status=401)
+
+        try:
+            comment = Comment.objects.get(comment_id=comment_id)
+
+        except Comment.DoesNotExist:
+            return JsonResponse({"error": "comment not found"}, status=404)
+
+        print(comment.post)
+        print(comment.post.author)
+
+    # COMMENT OWNER OR ADMIN OR BLOG OWNER
+        if (
+            comment.user != user
+            and user.role != "ADMIN"
+            and user != comment.post.author
+    ):
+            return JsonResponse({"error": "Not allowed"}, status=403)
+        comment.delete()
+
+        return JsonResponse({"message": "comment deleted"})
+    

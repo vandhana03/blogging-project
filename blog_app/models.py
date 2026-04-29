@@ -35,3 +35,17 @@ class Blog(models.Model):
 
     created_at=models.DateTimeField(auto_now_add=True)
     updated_at=models.DateField(auto_now=True)
+
+
+class Comment(models.Model):
+    comment_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(Users, on_delete=models.CASCADE)
+    post = models.ForeignKey(Blog, on_delete=models.CASCADE)
+
+    comment_content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+    def __str__(self):
+        return f" comment by {self.user.username} on {self.post.title}"
