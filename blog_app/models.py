@@ -18,3 +18,20 @@ class Category(models.Model):
 
     def __str__(self):
         return self.name
+    
+
+class Blog(models.Model):
+    class Status(models.TextChoices):
+        DRAFT="Draft"
+        PUBLISHED="Published"
+        ARCHIVED="Archived"
+
+    title=models.CharField(max_length=250)
+    content=models.TextField()
+    author=models.ForeignKey(Users,on_delete=models.CASCADE)
+    category=models.ForeignKey(Category,on_delete=models.SET_NULL,null=True)
+
+    status=models.CharField(max_length=20,choices=Status.choices,default=Status.DRAFT)
+
+    created_at=models.DateTimeField(auto_now_add=True)
+    updated_at=models.DateField(auto_now=True)

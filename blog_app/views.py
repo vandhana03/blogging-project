@@ -1,4 +1,5 @@
 import datetime
+import json
 import jwt
 
 from tokenize import generate_tokens
@@ -13,9 +14,9 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 
-from .models import Users
+from .models import Users,Blog, Category
 from .passwords import check_password, hash_password
-from .serializers import UserSerializer
+from .serializers import UserSerializer, Blogserializer
 from blog_app.utils.email_utils import send_dynamic_email
 # Create your views here.
 @method_decorator(csrf_exempt,name='dispatch')
@@ -80,3 +81,102 @@ class login(View):
                 "role":user.role
           }
         }, status=200)
+
+
+
+@method_decorator(csrf_exempt,name='dispatch')
+class BlogView(View):
+    # def get(self,req):
+    #     return JsonResponse({'status':'middleware worked well'})
+    
+    #create blog
+    def post(self,request):
+        auth_header = request.headers.get("Authorization")
+        if not auth_header:
+            return JsonResponse({"error": "Token missing"}, status=401)
+        try:
+            token = auth_header.split(" ")[1]
+            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            user = Users.objects.get(username=payload["username"])
+        except jwt.ExpiredSignatureError:
+            return JsonResponse({"error": "Token expired"}, status=401)
+        except jwt.InvalidTokenError:
+            return JsonResponse({"error": "Invalid token"}, status=401)
+        
+        data = json.loads(request.body)
+        print(user)
+        data['author'] = user.username
+        print(data)
+        serializer = Blogserializer(data=data)
+        if not serializer.is_valid():
+            return JsonResponse(serializer.errors, status=400)
+        post = serializer.save(author=user)
+        return JsonResponse(Blogserializer(post).data, status=201)
+        
+    #edit blog
+    def patch(self,request,blog_id):
+        auth_header = request.headers.get("Authorization")
+        if not auth_header:
+            return JsonResponse({"error": "Token missing"}, status=401)
+        try:
+            token = auth_header.split(" ")[1]
+            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            user = Users.objects.get(username=payload["username"])
+        except jwt.ExpiredSignatureError:
+            return JsonResponse({"error": "Token expired"}, status=401)
+        except jwt.InvalidTokenError:
+            return JsonResponse({"error": "Invalid token"}, status=401)
+        try:
+            post = Blog.objects.get(id=blog_id)
+
+        except Blog.DoesNotExist:
+            return JsonResponse({"error":"blog not found"},status=404)
+
+        if post.author != user:
+            return JsonResponse({"error":"not allowed"},status=403)
+
+        data = json.loads(request.body)
+
+        serializer = Blogserializer(post, data=data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+
+        return JsonResponse({
+            "message":"Post updated",
+            "data":serializer.data
+        })
+       
+
+            
+    
+    #delete blog
+    def delete(self,request,blog_id):
+        auth_header = request.headers.get("Authorization")
+        if not auth_header:
+            return JsonResponse({"error": "Token missing"}, status=401)
+        try:
+            token = auth_header.split(" ")[1]
+
+            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+
+            user = Users.objects.get(username=payload["username"])
+
+        except jwt.ExpiredSignatureError:
+            return JsonResponse({"error": "Token expired"}, status=401)
+
+        except jwt.InvalidTokenError:
+            return JsonResponse({"error": "Invalid token"}, status=401)
+
+        try:
+            post = Blog.objects.get(id=blog_id)
+
+        except Blog.DoesNotExist:
+            return JsonResponse({"error":"post not found"},status=404)
+
+        if post.author != user and user.role != "ADMIN":
+            return JsonResponse({"error":"not allowed"},status=403)
+        post.delete()
+
+        return JsonResponse({"message":"Post deleted"})
+        
